@@ -1,0 +1,115 @@
+---
+- hosts: servers
+  become: yes
+  tasks:
+    - name : Install java and wget package
+      yum:
+        name: [ java-1.8.0-openjdk-devel , wget ]
+        state: latest
+        update_cache: yes
+
+
+    - name: Configure Tomcat
+      get_url:
+        url: https://downloads.apache.org/tomcat/tomcat-9/v9.0.46/bin/apache-tomcat-9.0.46.tar.gz
+        dest: /usr/local
+
+
+    - name: Extracting tomcat tar                  # make use of unarchive module
+      command: tar -xvzf /usr/local/apache-tomcat-9.0.46.tar.gz     
+
+
+    - name: Renaming the directory to tomcat9
+      command: mv /usr/local/apache-tomcat-9.0.46 /usr/local/tomcat9
+
+  #  - name: Configure Tomcat
+  #    command: "{{item}}"   # get_url/uri module
+  #    with_items:
+  #  - cd /usr/local
+  #    - wget https://downloads.apache.org/tomcat/tomcat-9/v9.0.46/bin/apache-tomcat-9.0.46.tar.gz
+  #    - tar -xvzf apache-tomcat-9.0.46.tar.gz
+  #   - mv apache-tomcat-9.0.46 tomcat9
+
+    
+    - name: Add tomcat user
+      user:
+        name: tomcat
+        shell: /bin/bash
+        comment: Application_user
+        groups: wheel
+        home : /home/tomcat
+        create_home: yes
+
+ 
+
+    - name: Giving permissions to tomcat user and creating the tomcat file
+      command: echo `chown -R tomcat:tomcat /usr/local/tomcat9`
+
+    - name: Create tomcat service file
+      file:
+        name: tomcat.service
+        dest: /etc/systemd/system/
+        state: touch
+              
+
+    - name: Copying jinja template for tomcat.service file
+      template:
+        src: /root/tomcat.j2
+        dest: /etc/systemd/system/tomcat.service
+
+
+    - name: Reload tomcat daemon and services
+      command: sudo systemctl daemon-reload
+
+
+
+ #   - name: Reload tomcat daemon
+ #     systemd:
+ #       state: reloaded
+ #       name: tomcat.service
+      
+
+    - name: Run tomcat service
+      systemd:
+        state: started
+        name: tomcat.service
+
+
+
+#    - name: Reload tomcat daemon and services
+#      command: "{{item}}"
+#      with_items:      # systemd module
+#      - systemctl daemon-reload
+#      - systemctl start tomcat.service
+#      - systemctl enable tomcat.service
+#      - systemctl status tomcat.service
+  
+
+    - name: Copying war file
+      copy:
+        src: /root/helloworld.war
+        dest: /usr/local/tomcat9/webapps
+      notify: 
+      - restart tomcat service
+
+#    - name: Enable Remote Access to Tomcat Manager and Host Manager
+#      lineinfile: 
+#        path: /usr/local/tomcat9/webapps/manager/META-INF/context.xml
+#        regexp: '^allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1" />'
+#        line: 'allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1 |.*" />'
+
+
+    - name: Enable Remote Access to Tomcat Manager and Host Manager
+      lineinfile: 
+        path: /usr/local/tomcat9/webapps/manager/META-INF/context.xml
+        regexp: '<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1" />'
+        line: '<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1 |.*" />'
+
+
+
+  handlers:
+    - name: restart tomcat service
+      service: name=tomcat state=restarted
+
+
+
